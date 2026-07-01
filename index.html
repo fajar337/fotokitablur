@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FOTO KITA - Instant Blur Photo Booth</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Poppins', sans-serif; }
+    body { background: #f5f5f5; }
+
+    .logo-text {
+      font-weight: 800;
+      color: #e63946;
+      letter-spacing: 2px;
+      font-size: 2rem;
+      text-shadow: 2px 2px 0px #b52030;
+    }
+
+    #camera-wrapper {
+      position: relative;
+      background: #1a1a2e;
+      border: 4px solid #e63946;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+      width: 100%;
+    }
+
+    #videoEl, #canvasEl {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #canvasEl { z-index: 2; }
+
+    /* BLUR label */
+    #blur-label {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 5;
+      font-size: 3.5rem;
+      font-weight: 800;
+      color: white;
+      text-shadow: 3px 3px 10px rgba(0,0,0,0.8);
+      letter-spacing: 6px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    #blur-label.visible { opacity: 1; }
+
+    /* Countdown overlay */
+    #countdown-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    #countdown-overlay.show { opacity: 1; pointer-events: all; }
+    #countdown-num {
+      font-size: 9rem;
+      font-weight: 800;
+      color: white;
+      text-shadow: 0 0 40px rgba(230,57,70,0.9), 0 0 80px rgba(230,57,70,0.5);
+      line-height: 1;
+      animation: pop 0.4s ease;
+    }
+    #countdown-num.foto-text {
+      font-size: 4rem;
+      letter-spacing: 8px;
+      color: #ffd700;
+      text-shadow: 0 0 30px rgba(255,215,0,0.8);
+    }
+    @keyframes pop {
+      0% { transform: scale(2); opacity: 0; }
+      60% { transform: scale(0.9); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+
+    /* Start button overlay (before session) */
+    #start-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(26,26,46,0.7);
+      gap: 1rem;
+    }
+    #start-overlay.hidden { display: none; }
+
+    #mulai-btn {
+      background: #e63946;
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 800;
+      padding: 1rem 3rem;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      letter-spacing: 3px;
+      box-shadow: 0 0 0 0 rgba(230,57,70,0.6);
+      animation: ring 1.8s infinite;
+      transition: transform 0.1s, background 0.2s;
+    }
+    #mulai-btn:hover { background: #c1121f; transform: scale(1.05); }
+    #mulai-btn:active { transform: scale(0.97); }
+    @keyframes ring {
+      0%   { box-shadow: 0 0 0 0 rgba(230,57,70,0.6); }
+      70%  { box-shadow: 0 0 0 20px rgba(230,57,70,0); }
+      100% { box-shadow: 0 0 0 0 rgba(230,57,70,0); }
+    }
+
+    /* Blur overlay */
+    .blur-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      transition: backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
+    }
+
+    /* Easter egg overlay */
+    #easter-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #cc0001 50%, #fff 50%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #easter-overlay.show { opacity: 1; }
+    #easter-text {
+      font-size: 3rem;
+      font-weight: 800;
+      color: white;
+      text-shadow: 3px 3px 0 #8b0000;
+      letter-spacing: 4px;
+      text-align: center;
+      line-height: 1.2;
+      animation: shake 0.4s infinite alternate;
+    }
+    #easter-sub {
+      font-size: 1.2rem;
+      color: #cc0001;
+      font-weight: 700;
+      margin-top: 0.5rem;
+      animation: shake 0.3s infinite alternate;
+    }
+    @keyframes shake {
+      from { transform: rotate(-2deg) scale(1); }
+      to   { transform: rotate(2deg) scale(1.04); }
+    }
+    .star { font-size: 3rem; animation: spin 2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Status dot */
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-dot.inactive {
+      background: #ef4444;
+      box-shadow: 0 0 6px #ef4444;
+      animation: none;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .card-title {
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: #e63946;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.6rem;
+    }
+
+    select {
+      width: 100%;
+      padding: 0.45rem 0.7rem;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      color: #374151;
+      outline: none;
+      background: #f9fafb;
+      cursor: pointer;
+    }
+    select:focus { border-color: #e63946; }
+
+    .step-num {
+      width: 22px; height: 22px;
+      background: #e63946;
+      color: white;
+      border-radius: 50%;
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .tip-dot {
+      width: 6px; height: 6px;
+      background: #e63946;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    #no-camera-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      color: #9ca3af;
+      gap: 0.5rem;
+    }
+
+    .beta-badge {
+      background: #e63946;
+      color: white;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+      vertical-align: middle;
+    }
+
+    /* Flash effect */
+    #flash {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.05s;
+    }
+    #flash.flash-on { opacity: 1; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm py-3 px-6 flex items-center gap-4">
+    <div class="flex flex-col leading-tight">
+      <span class="logo-text">&#9829; FOTO KITA</span>
+      <span class="text-xs text-gray-500 font-medium tracking-wide">
+        Instant Blur Photo Booth &nbsp;<span class="beta-badge">BETA</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col md:flex-row gap-4 p-4 max-w-6xl mx-auto w-full">
+
+    <!-- Camera Panel -->
+    <div class="flex-1 flex flex-col gap-3">
+      <div id="camera-wrapper">
+        <video id="videoEl" autoplay playsinline muted></video>
+        <canvas id="canvasEl"></canvas>
+        <div class="blur-overlay" id="blurOverlay"></div>
+        <div id="blur-label">BLUR!</div>
+        <div id="flash"></div>
+
+        <!-- Start overlay (shown before session) -->
+        <div id="start-overlay">
+          <p class="text-white text-sm font-semibold opacity-70 tracking-widest">FOTO KITA BOOTH</p>
+          <button id="mulai-btn">🎬 MULAI</button>
+          <p class="text-white text-xs opacity-50">Tekan untuk memulai sesi foto</p>
+        </div>
+
+        <!-- Countdown overlay -->
+        <div id="countdown-overlay">
+          <div id="countdown-num">3</div>
+        </div>
+
+        <!-- Easter egg: Hidup Jokowi -->
+        <div id="easter-overlay">
+          <div class="star">⭐</div>
+          <div id="easter-text">HIDUP<br>JOKOWI!</div>
+          <div id="easter-sub">👊 Kepalan Semangat! 👊</div>
+          <div class="star">⭐</div>
+        </div>
+
+        <div id="no-camera-msg">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <p class="text-sm font-medium">Mengakses kamera...</p>
+        </div>
+      </div>
+
+      <!-- Gesture Status Bar -->
+      <div class="card flex items-center gap-3">
+        <div class="flex items-center gap-2 flex-1">
+          <div class="status-dot inactive" id="gestureStatusDot"></div>
+          <span class="text-sm font-semibold text-gray-700" id="gestureStatusText">Tekan Mulai untuk memulai...</span>
+        </div>
+        <span class="text-xs text-gray-400" id="handCount">Tangan: 0</span>
+      </div>
+    </div>
+
+    <!-- Right Side Panel -->
+    <div class="md:w-64 flex flex-col gap-3">
+
+      <!-- Camera Status -->
+      <div class="card">
+        <div class="card-title">Camera Active</div>
+        <div class="flex items-center gap-2 mb-2">
+          <div class="status-dot inactive" id="camStatusDot"></div>
+          <span class="text-xs text-gray-600" id="camStatusText">Memulai kamera...</span>
+        </div>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          Tunjukkan gestur <strong>✌ peace</strong> ke kamera untuk mengaktifkan blur!
+        </p>
+      </div>
+
+      <!-- Camera Source -->
+      <div class="card">
+        <div class="card-title">Camera Source</div>
+        <select id="cameraSelect">
+          <option value="">Memuat kamera...</option>
+        </select>
+      </div>
+
+      <!-- How to Play -->
+      <div class="card">
+        <div class="card-title">How to Play</div>
+        <div class="flex flex-col gap-2.5">
+          <div class="flex items-start gap-2">
+            <div class="step-num">1</div>
+            <p class="text-xs text-gray-600 leading-snug">Izinkan akses kamera saat browser meminta</p>
+          </div>
+          <div class="flex items-start gap-2">
+            <div class="step-num">2</div>
+            <p class="text-xs text-gray-600 leading-snug">Tekan tombol <strong>Mulai</strong> untuk memulai sesi</p>
+          </div>
+          <div class="flex items-start gap-2">
+            <div class="step-num">3</div>
+            <p class="text-xs text-gray-600 leading-snug">Acungkan ✌ peace — layar akan ter-blur!</p>
+          </div>
+          <div class="flex items-start gap-2">
+            <div class="step-num">4</div>
+            <p class="text-xs text-gray-600 leading-snug">Kepalkan tangan untuk Easter Egg 🤫</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="card">
+        <div class="card-title">Tips</div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-start gap-2">
+            <div class="tip-dot"></div>
+            <p class="text-xs text-gray-600 leading-snug">Pastikan ruangan cukup terang agar deteksi akurat</p>
+          </div>
+          <div class="flex items-start gap-2">
+            <div class="tip-dot"></div>
+            <p class="text-xs text-gray-600 leading-snug">Rentangkan kedua jari ✌ dengan jelas</p>
+          </div>
+          <div class="flex items-start gap-2">
+            <div class="tip-dot"></div>
+            <p class="text-xs text-gray-600 leading-snug">Jaga tangan stabil di depan kamera</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mulai Button (sidebar version) -->
+      <button id="mulai-btn-side"
+        class="w-full py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-base rounded-xl transition-colors shadow tracking-widest">
+        🎬 MULAI
+      </button>
+
+      <!-- Screenshot Button -->
+      <button id="screenshotBtn"
+        class="w-full py-2.5 bg-gray-700 hover:bg-gray-800 active:bg-gray-900 text-white font-bold text-sm rounded-xl transition-colors shadow" disabled>
+        📸 Ambil Foto
+      </button>
+    </div>
+
+  </main>
+
+  <canvas id="screenshotCanvas" class="hidden"></canvas>
+
+  <script>
+    // ─── DOM refs ────────────────────────────────────────────────────────────
+    const videoEl           = document.getElementById('videoEl');
+    const canvasEl          = document.getElementById('canvasEl');
+    const ctx               = canvasEl.getContext('2d');
+    const blurOverlay       = document.getElementById('blurOverlay');
+    const blurLabel         = document.getElementById('blur-label');
+    const camStatusDot      = document.getElementById('camStatusDot');
+    const camStatusText     = document.getElementById('camStatusText');
+    const gestureStatusDot  = document.getElementById('gestureStatusDot');
+    const gestureStatusText = document.getElementById('gestureStatusText');
+    const handCountEl       = document.getElementById('handCount');
+    const cameraSelect      = document.getElementById('cameraSelect');
+    const noCameraMsg       = document.getElementById('no-camera-msg');
+    const screenshotBtn     = document.getElementById('screenshotBtn');
+    const mulaiBtn          = document.getElementById('mulai-btn');
+    const mulaiSide         = document.getElementById('mulai-btn-side');
+    const startOverlay      = document.getElementById('start-overlay');
+    const countdownOverlay  = document.getElementById('countdown-overlay');
+    const countdownNum      = document.getElementById('countdown-num');
+    const easterOverlay     = document.getElementById('easter-overlay');
+    const flashEl           = document.getElementById('flash');
+
+    // ─── State ───────────────────────────────────────────────────────────────
+    let currentStream   = null;
+    let blurAlpha       = 0;
+    let sessionActive   = false;
+    let countdownRunning = false;
+    let easterActive    = false;
+    let easterTimeout   = null;
+    let fistFrames      = 0;       // consecutive frames with fist detected
+
+    // ─── Audio ───────────────────────────────────────────────────────────────
+    const bgmAudio     = new Audio('FOTO KITA BLUR - SAL PRIADI (mp3cut.net).mp3');
+    const jokowiAudio  = new Audio('Hidup jokowi  sound meme.mp3');
+    bgmAudio.loop      = false;
+    jokowiAudio.loop   = false;
+
+    function playCountdownSound() {
+      bgmAudio.currentTime = 0;
+      bgmAudio.play().catch(() => {});
+    }
+
+    function stopCountdownSound() {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+    }
+
+    function playHidupJokowi() {
+      jokowiAudio.currentTime = 0;
+      jokowiAudio.play().catch(() => {});
+    }
+
+    // Camera shutter click (tetap Web Audio agar ringan)
+    function playShutter() {
+      try {
+        const ac   = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1200, ac.currentTime);
+        gain.gain.setValueAtTime(0.2, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.08);
+        osc.start(); osc.stop(ac.currentTime + 0.1);
+      } catch {}
+    }
+
+    // ─── Camera ──────────────────────────────────────────────────────────────
+    async function getCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        cameraSelect.innerHTML = '';
+        cams.forEach((cam, i) => {
+          const opt = document.createElement('option');
+          opt.value = cam.deviceId;
+          opt.textContent = cam.label || `Camera ${i + 1}`;
+          cameraSelect.appendChild(opt);
+        });
+        if (!cams.length) cameraSelect.innerHTML = '<option>Tidak ada kamera</option>';
+      } catch { cameraSelect.innerHTML = '<option>Gagal memuat kamera</option>'; }
+    }
+
+    async function startCamera(deviceId) {
+      if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+      try {
+        const constraints = {
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
+            : { width: 1280, height: 720 }
+        };
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoEl.srcObject = currentStream;
+        await new Promise(res => videoEl.onloadedmetadata = res);
+        videoEl.play();
+        noCameraMsg.style.display = 'none';
+        camStatusDot.classList.remove('inactive');
+        camStatusText.textContent = 'Kamera aktif';
+        await getCameras();
+        startHandDetection();
+      } catch (e) {
+        camStatusText.textContent = 'Gagal mengakses kamera';
+        console.error(e);
+      }
+    }
+
+    cameraSelect.addEventListener('change', () => {
+      if (cameraSelect.value) startCamera(cameraSelect.value);
+    });
+
+    // ─── Gesture Helpers ─────────────────────────────────────────────────────
+    function fingerUp(lm, tip, pip) { return lm[tip].y < lm[pip].y; }
+
+    function isPeaceGesture(lm) {
+      if (!fingerUp(lm, 8, 6) || !fingerUp(lm, 12, 10)) return false;
+      if (fingerUp(lm, 16, 14) || fingerUp(lm, 20, 18))  return false;
+      const dx = lm[8].x - lm[12].x, dy = lm[8].y - lm[12].y;
+      return Math.sqrt(dx*dx + dy*dy) >= 0.05;
+    }
+
+    function isFistGesture(lm) {
+      // All 4 fingers curled (tips below PIP)
+      return !fingerUp(lm, 8, 6) &&
+             !fingerUp(lm, 12, 10) &&
+             !fingerUp(lm, 16, 14) &&
+             !fingerUp(lm, 20, 18);
+    }
+
+    // ─── MediaPipe Hands ─────────────────────────────────────────────────────
+    function startHandDetection() {
+      const hands = new Hands({
+        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+      });
+      hands.setOptions({
+        maxNumHands: 4,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
+      hands.onResults(onResults);
+
+      const cam = new Camera(videoEl, {
+        onFrame: async () => {
+          canvasEl.width  = videoEl.videoWidth;
+          canvasEl.height = videoEl.videoHeight;
+          await hands.send({ image: videoEl });
+        },
+        width: 1280, height: 720,
+      });
+      cam.start();
+    }
+
+    function onResults(results) {
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      const detected = results.multiHandLandmarks || [];
+      handCountEl.textContent = `Tangan: ${detected.length}`;
+
+      if (!sessionActive) return;
+
+      let peaceFound = false;
+      let fistFound  = false;
+      for (const hand of detected) {
+        if (isPeaceGesture(hand)) peaceFound = true;
+        if (isFistGesture(hand))  fistFound  = true;
+      }
+
+      // ── Easter egg: fist ──
+      if (fistFound) {
+        fistFrames++;
+        if (fistFrames === 8 && !easterActive) triggerEasterEgg();
+      } else {
+        fistFrames = 0;
+      }
+
+      // ── Peace → blur ──
+      if (!easterActive) {
+        if (peaceFound) {
+          blurAlpha = Math.min(1, blurAlpha + 0.15);
+          gestureStatusDot.classList.remove('inactive');
+          gestureStatusText.textContent = '✌ Peace terdeteksi! Blur aktif';
+        } else {
+          blurAlpha = Math.max(0, blurAlpha - 0.12);
+          gestureStatusDot.classList.add('inactive');
+          gestureStatusText.textContent = detected.length > 0
+            ? 'Tangan terdeteksi — tunjukkan peace ✌'
+            : 'Menunggu gestur peace...';
+        }
+
+        const px = Math.round(blurAlpha * 22);
+        blurOverlay.style.backdropFilter = px > 0 ? `blur(${px}px)` : '';
+        blurOverlay.style.webkitBackdropFilter = px > 0 ? `blur(${px}px)` : '';
+        blurLabel.classList.toggle('visible', blurAlpha > 0.5);
+      }
+    }
+
+    // ─── Easter Egg ──────────────────────────────────────────────────────────
+    function triggerEasterEgg() {
+      easterActive = true;
+      easterOverlay.classList.add('show');
+      stopCountdownSound();
+      playHidupJokowi();
+      gestureStatusText.textContent = '👊 HIDUP JOKOWI! Easter egg aktif!';
+
+      clearTimeout(easterTimeout);
+      easterTimeout = setTimeout(() => {
+        easterOverlay.classList.remove('show');
+        easterActive = false;
+        fistFrames = 0;
+        gestureStatusText.textContent = 'Menunggu gestur peace...';
+      }, 5000);
+    }
+
+    // ─── Countdown & Mulai ───────────────────────────────────────────────────
+    function doCountdown() {
+      if (countdownRunning) return;
+      countdownRunning = true;
+
+      const steps = ['1', '2', '3', 'FOTO!'];
+      let i = 0;
+
+      countdownOverlay.classList.add('show');
+
+      function nextStep() {
+        countdownNum.className = steps[i] === 'FOTO!' ? 'foto-text' : '';
+        countdownNum.textContent = steps[i];
+        // retrigger animation
+        countdownNum.style.animation = 'none';
+        void countdownNum.offsetWidth;
+        countdownNum.style.animation = '';
+
+        // mulai lagu pas FOTO! muncul
+        if (steps[i] === 'FOTO!') playCountdownSound();
+
+        i++;
+        if (i < steps.length) {
+          setTimeout(nextStep, 1000);
+        } else {
+          // FOTO moment
+          setTimeout(() => {
+            flashEl.classList.add('flash-on');
+            playShutter();
+            setTimeout(() => flashEl.classList.remove('flash-on'), 150);
+            countdownOverlay.classList.remove('show');
+            countdownRunning = false;
+            // session stays active, gesture detection continues
+          }, 700);
+        }
+      }
+      nextStep();
+    }
+
+    function startSession() {
+      if (countdownRunning) return;
+      startOverlay.classList.add('hidden');
+      sessionActive = true;
+      screenshotBtn.disabled = false;
+      gestureStatusText.textContent = 'Menunggu gestur peace...';
+      doCountdown();
+    }
+
+    mulaiBtn.addEventListener('click', startSession);
+    mulaiSide.addEventListener('click', startSession);
+
+    // ─── Screenshot ──────────────────────────────────────────────────────────
+    screenshotBtn.addEventListener('click', () => {
+      const sc   = document.getElementById('screenshotCanvas');
+      sc.width   = videoEl.videoWidth;
+      sc.height  = videoEl.videoHeight;
+      const sctx = sc.getContext('2d');
+      sctx.save();
+      sctx.scale(-1, 1);
+      sctx.drawImage(videoEl, -sc.width, 0);
+      sctx.restore();
+
+      if (blurAlpha > 0.3) {
+        sctx.filter = `blur(${Math.round(blurAlpha * 18)}px)`;
+        sctx.save();
+        sctx.scale(-1, 1);
+        sctx.drawImage(videoEl, -sc.width, 0);
+        sctx.restore();
+        sctx.filter = 'none';
+      }
+
+      playShutter();
+      flashEl.classList.add('flash-on');
+      setTimeout(() => flashEl.classList.remove('flash-on'), 120);
+
+      const link = document.createElement('a');
+      link.download = `fotokita_${Date.now()}.png`;
+      link.href = sc.toDataURL('image/png');
+      link.click();
+    });
+
+    // ─── Init ────────────────────────────────────────────────────────────────
+    startCamera(null);
+  </script>
+</body>
+</html>
