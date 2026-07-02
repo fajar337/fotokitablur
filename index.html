@@ -551,7 +551,7 @@
         else if (isMobile()) vc = { facingMode: 'user' };
         else                 vc = { width: { ideal: 1280 }, height: { ideal: 720 } };
 
-        currentStream = await navigator.mediaDevices.getUserMedia({ video: vc });
+        currentStream = await navigator.mediaDevices.getUserMedia({ video: vc, audio: true });
         videoEl.srcObject = currentStream;
         await new Promise(res => videoEl.onloadedmetadata = res);
         videoEl.play();
@@ -706,45 +706,57 @@
     let mediaRecorder  = null;
     let recordedChunks = [];
     let isRecording    = false;
-    let recRafId       = null;
+    let recIntervalId  = null;
+    const REC_FPS      = isMobile() ? 20 : 30;
 
     function pickMime() {
       return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
-        .find(t=>MediaRecorder.isTypeSupported(t)) || '';
+        .find(t => MediaRecorder.isTypeSupported(t)) || '';
     }
 
     function drawRecFrame() {
-      if (!isRecording) return;
       recCanvas.width  = videoEl.videoWidth  || 640;
       recCanvas.height = videoEl.videoHeight || 480;
       recCtx.save();
-      recCtx.scale(-1,1);
-      recCtx.filter = blurAlpha>0 ? `blur(${Math.round(blurAlpha*22)}px)` : 'none';
+      recCtx.scale(-1, 1);
+      recCtx.filter = blurAlpha > 0 ? `blur(${Math.round(blurAlpha * 22)}px)` : 'none';
       recCtx.drawImage(videoEl, -recCanvas.width, 0);
       recCtx.restore();
-      recRafId = requestAnimationFrame(drawRecFrame);
     }
 
     function startRecording() {
       if (!currentStream) return;
-      recordedChunks=[]; isRecording=true;
+      recordedChunks = []; isRecording = true;
+
+      // draw first frame so canvas is not empty
       drawRecFrame();
-      const stream  = recCanvas.captureStream(30);
+
+      // video stream from canvas at fixed FPS
+      const videoStream = recCanvas.captureStream(REC_FPS);
+
+      // attach audio tracks from camera stream (if any)
+      currentStream.getAudioTracks().forEach(t => videoStream.addTrack(t));
+
       const mime    = pickMime();
-      mediaRecorder = new MediaRecorder(stream, mime?{mimeType:mime}:{});
-      mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
+      mediaRecorder = new MediaRecorder(videoStream, mime ? { mimeType: mime } : {});
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.onstop = saveVideo;
-      mediaRecorder.start(100);
+      mediaRecorder.start(200);
+
+      // setInterval for consistent frame rate (avoids RAF throttling on background tabs)
+      recIntervalId = setInterval(drawRecFrame, 1000 / REC_FPS);
+
       recIndicator.classList.add('show');
-      recBtns.forEach(b=>b&&(b.classList.add('recording'), b.textContent='⏹ Stop Rekam'));
+      recBtns.forEach(b => b && (b.classList.add('recording'), b.textContent = '⏹ Stop Rekam'));
     }
 
     function stopRecording() {
-      isRecording=false;
-      cancelAnimationFrame(recRafId);
-      if (mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
+      isRecording = false;
+      clearInterval(recIntervalId);
+      recIntervalId = null;
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
       recIndicator.classList.remove('show');
-      recBtns.forEach(b=>b&&(b.classList.remove('recording'), b.textContent='🎥 Rekam Video'));
+      recBtns.forEach(b => b && (b.classList.remove('recording'), b.textContent = '🎥 Rekam Video'));
     }
 
     function saveVideo() {
