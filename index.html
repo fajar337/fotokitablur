@@ -2,316 +2,359 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#e63946" />
   <title>FOTO KITA - Instant Blur Photo Booth</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    * { font-family: 'Poppins', sans-serif; }
-    body { background: #f5f5f5; }
+    *, *::before, *::after { font-family: 'Poppins', sans-serif; box-sizing: border-box; }
 
+    html { height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background: #f0f0f0;
+      overscroll-behavior: none;
+      -webkit-overflow-scrolling: touch;
+      padding-top: env(safe-area-inset-top);
+    }
+    button, select { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+    /* ═══ HEADER ═══ */
+    #app-header {
+      background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
     .logo-text {
       font-weight: 800;
       color: #e63946;
       letter-spacing: 2px;
-      font-size: 2rem;
-      text-shadow: 2px 2px 0px #b52030;
+      font-size: clamp(1.1rem, 5vw, 1.7rem);
+      text-shadow: 2px 2px 0 #b52030;
+      line-height: 1;
     }
+    .beta-badge {
+      background: #e63946; color: white;
+      font-size: 0.55rem; font-weight: 700;
+      padding: 1px 5px; border-radius: 4px; letter-spacing: 1px;
+    }
+    #header-status { display: flex; align-items: center; gap: 6px; }
+
+    /* ═══ MAIN LAYOUT ═══ */
+    #app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;   /* mobile: stack */
+      gap: 10px;
+      padding: 10px;
+      width: 100%;
+      max-width: 1152px;
+      margin: 0 auto;
+      /* leave room for sticky bottom bar on mobile */
+      padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+
+    /* ═══ CAMERA ═══ */
+    #camera-col { display: flex; flex-direction: column; gap: 10px; flex: 1; }
 
     #camera-wrapper {
       position: relative;
       background: #1a1a2e;
-      border: 4px solid #e63946;
+      border: 3px solid #e63946;
       border-radius: 12px;
       overflow: hidden;
-      aspect-ratio: 16/9;
       width: 100%;
+      aspect-ratio: 4/3;   /* portrait-friendly on mobile */
     }
-
     #videoEl, #canvasEl {
-      position: absolute;
-      top: 0; left: 0;
+      position: absolute; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
       transform: scaleX(-1);
     }
     #canvasEl { z-index: 2; }
 
-    /* BLUR label */
+    /* ═══ OVERLAYS ═══ */
     #blur-label {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
       z-index: 5;
-      font-size: 3.5rem;
-      font-weight: 800;
-      color: white;
+      font-size: clamp(1.8rem, 7vw, 3.5rem);
+      font-weight: 800; color: white;
       text-shadow: 3px 3px 10px rgba(0,0,0,0.8);
-      letter-spacing: 6px;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-      pointer-events: none;
+      letter-spacing: 6px; opacity: 0;
+      transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
     }
     #blur-label.visible { opacity: 1; }
 
-    /* Countdown overlay */
     #countdown-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: absolute; inset: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: center;
       background: rgba(0,0,0,0.45);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
     }
     #countdown-overlay.show { opacity: 1; pointer-events: all; }
     #countdown-num {
-      font-size: 9rem;
-      font-weight: 800;
-      color: white;
-      text-shadow: 0 0 40px rgba(230,57,70,0.9), 0 0 80px rgba(230,57,70,0.5);
-      line-height: 1;
-      animation: pop 0.4s ease;
+      font-size: clamp(5rem, 18vw, 9rem);
+      font-weight: 800; color: white;
+      text-shadow: 0 0 40px rgba(230,57,70,0.9);
+      line-height: 1; animation: pop 0.4s ease;
     }
     #countdown-num.foto-text {
-      font-size: 4rem;
-      letter-spacing: 8px;
-      color: #ffd700;
+      font-size: clamp(2rem, 7vw, 4rem);
+      letter-spacing: 8px; color: #ffd700;
       text-shadow: 0 0 30px rgba(255,215,0,0.8);
     }
     @keyframes pop {
-      0% { transform: scale(2); opacity: 0; }
-      60% { transform: scale(0.9); opacity: 1; }
+      0%   { transform: scale(2); opacity: 0; }
+      60%  { transform: scale(0.9); opacity: 1; }
       100% { transform: scale(1); }
     }
 
-    /* Start button overlay (before session) */
     #start-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 15;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: rgba(26,26,46,0.7);
-      gap: 1rem;
+      position: absolute; inset: 0; z-index: 15;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(26,26,46,0.72); gap: 12px;
     }
     #start-overlay.hidden { display: none; }
 
     #mulai-btn {
-      background: #e63946;
-      color: white;
-      font-size: 1.5rem;
-      font-weight: 800;
-      padding: 1rem 3rem;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      letter-spacing: 3px;
+      background: #e63946; color: white;
+      font-size: clamp(1rem, 4vw, 1.4rem);
+      font-weight: 800; padding: 14px 40px;
+      border-radius: 999px; border: none; cursor: pointer;
+      letter-spacing: 3px; min-height: 56px;
       box-shadow: 0 0 0 0 rgba(230,57,70,0.6);
       animation: ring 1.8s infinite;
       transition: transform 0.1s, background 0.2s;
     }
-    #mulai-btn:hover { background: #c1121f; transform: scale(1.05); }
-    #mulai-btn:active { transform: scale(0.97); }
+    #mulai-btn:active { transform: scale(0.96); background: #c1121f; }
     @keyframes ring {
       0%   { box-shadow: 0 0 0 0 rgba(230,57,70,0.6); }
-      70%  { box-shadow: 0 0 0 20px rgba(230,57,70,0); }
+      70%  { box-shadow: 0 0 0 22px rgba(230,57,70,0); }
       100% { box-shadow: 0 0 0 0 rgba(230,57,70,0); }
     }
 
-    /* Blur overlay */
+    #easter-overlay {
+      position: absolute; inset: 0; z-index: 30;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #cc0001 50%, #fff 50%);
+      opacity: 0; pointer-events: none; transition: opacity 0.3s; gap: 6px;
+    }
+    #easter-overlay.show { opacity: 1; }
+    #easter-text {
+      font-size: clamp(1.8rem, 7vw, 3rem); font-weight: 800;
+      color: white; text-shadow: 3px 3px 0 #8b0000;
+      letter-spacing: 4px; text-align: center; line-height: 1.2;
+      animation: shake 0.4s infinite alternate;
+    }
+    #easter-sub {
+      font-size: clamp(0.8rem, 3vw, 1.1rem);
+      color: #cc0001; font-weight: 700;
+      animation: shake 0.3s infinite alternate;
+    }
+    .star { font-size: clamp(1.5rem, 5vw, 2.5rem); animation: spin 2s linear infinite; }
+    @keyframes shake { from { transform: rotate(-2deg) scale(1); } to { transform: rotate(2deg) scale(1.04); } }
+    @keyframes spin  { to { transform: rotate(360deg); } }
+
     .blur-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 3;
+      position: absolute; inset: 0; z-index: 3;
       pointer-events: none;
       transition: backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
     }
 
-    /* Easter egg overlay */
-    #easter-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 30;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #cc0001 50%, #fff 50%);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s;
+    #rec-indicator {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      display: none; align-items: center; gap: 6px;
+      background: rgba(0,0,0,0.55); padding: 4px 10px 4px 8px;
+      border-radius: 999px; pointer-events: none;
     }
-    #easter-overlay.show { opacity: 1; }
-    #easter-text {
-      font-size: 3rem;
-      font-weight: 800;
-      color: white;
-      text-shadow: 3px 3px 0 #8b0000;
-      letter-spacing: 4px;
-      text-align: center;
-      line-height: 1.2;
-      animation: shake 0.4s infinite alternate;
-    }
-    #easter-sub {
-      font-size: 1.2rem;
-      color: #cc0001;
-      font-weight: 700;
-      margin-top: 0.5rem;
-      animation: shake 0.3s infinite alternate;
-    }
-    @keyframes shake {
-      from { transform: rotate(-2deg) scale(1); }
-      to   { transform: rotate(2deg) scale(1.04); }
-    }
-    .star { font-size: 3rem; animation: spin 2s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    #rec-indicator.show { display: flex; }
+    .rec-dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; animation: blink 1s step-start infinite; }
+    .rec-text { color: white; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
 
-    /* Status dot */
-    .status-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #22c55e;
-      box-shadow: 0 0 6px #22c55e;
-      animation: pulse 1.5s infinite;
-      flex-shrink: 0;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    .status-dot.inactive {
-      background: #ef4444;
-      box-shadow: 0 0 6px #ef4444;
-      animation: none;
-    }
-
-    .card {
-      background: white;
-      border-radius: 12px;
-      padding: 1rem 1.2rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    .card-title {
-      font-weight: 700;
-      font-size: 0.8rem;
-      color: #e63946;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 0.6rem;
-    }
-
-    select {
-      width: 100%;
-      padding: 0.45rem 0.7rem;
-      border: 1.5px solid #e5e7eb;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      color: #374151;
-      outline: none;
-      background: #f9fafb;
-      cursor: pointer;
-    }
-    select:focus { border-color: #e63946; }
-
-    .step-num {
-      width: 22px; height: 22px;
-      background: #e63946;
-      color: white;
-      border-radius: 50%;
-      font-size: 0.7rem;
-      font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .tip-dot {
-      width: 6px; height: 6px;
-      background: #e63946;
-      border-radius: 50%;
-      flex-shrink: 0;
-      margin-top: 6px;
-    }
-
-    #no-camera-msg {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      color: #9ca3af;
-      gap: 0.5rem;
-    }
-
-    .beta-badge {
-      background: #e63946;
-      color: white;
-      font-size: 0.6rem;
-      font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 4px;
-      letter-spacing: 1px;
-      vertical-align: middle;
-    }
-
-    /* Flash effect */
     #flash {
-      position: absolute;
-      inset: 0;
-      z-index: 25;
-      background: white;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.05s;
+      position: absolute; inset: 0; z-index: 25;
+      background: white; opacity: 0; pointer-events: none; transition: opacity 0.05s;
     }
     #flash.flash-on { opacity: 1; }
+
+    #no-camera-msg {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 10; color: #9ca3af; gap: 8px;
+    }
+
+    /* ═══ STATUS BAR ═══ */
+    .status-bar {
+      background: white; border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 6px #22c55e;
+      animation: pulse 1.5s infinite; flex-shrink: 0;
+    }
+    .status-dot.inactive { background: #ef4444; box-shadow: 0 0 6px #ef4444; animation: none; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    /* ═══ CARDS ═══ */
+    .card {
+      background: white; border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .card-title {
+      font-weight: 700; font-size: 0.72rem;
+      color: #e63946; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 8px;
+    }
+    select {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid #e5e7eb; border-radius: 8px;
+      font-size: 0.82rem; color: #374151;
+      outline: none; background: #f9fafb; cursor: pointer; min-height: 44px;
+    }
+    select:focus { border-color: #e63946; }
+    .step-num {
+      width: 22px; height: 22px; background: #e63946; color: white;
+      border-radius: 50%; font-size: 0.7rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tip-dot {
+      width: 6px; height: 6px; background: #e63946;
+      border-radius: 50%; flex-shrink: 0; margin-top: 6px;
+    }
+
+    /* ═══ ACCORDION (mobile info) ═══ */
+    details { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
+    details > summary {
+      list-style: none; cursor: pointer; padding: 12px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      user-select: none; -webkit-user-select: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    .chevron { transition: transform 0.2s; flex-shrink: 0; }
+    details[open] .chevron { transform: rotate(180deg); }
+    .accordion-body { padding: 0 14px 12px; }
+
+    /* ═══ BUTTONS ═══ */
+    .btn-primary {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; min-height: 52px;
+      background: #e63946; color: white;
+      font-weight: 800; font-size: 1rem;
+      border-radius: 14px; border: none; cursor: pointer;
+      letter-spacing: 2px;
+      box-shadow: 0 4px 14px rgba(230,57,70,0.3);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:active { background: #c1121f; transform: scale(0.97); }
+
+    .btn-secondary {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; min-height: 52px;
+      background: #374151; color: white;
+      font-weight: 700; font-size: 0.9rem;
+      border-radius: 14px; border: none; cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-secondary:active { background: #1f2937; transform: scale(0.97); }
+    .btn-secondary:disabled { background: #9ca3af; cursor: not-allowed; opacity: 0.7; }
+    .btn-secondary.recording { background: #ef4444; box-shadow: 0 4px 14px rgba(239,68,68,0.3); }
+
+    /* ═══ MOBILE BOTTOM BAR ═══ */
+    #mobile-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+      padding: 10px 16px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      display: flex; gap: 10px;
+      z-index: 100;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+    }
+
+    /* ═══ DESKTOP SIDEBAR ═══ */
+    #sidebar { display: none; flex-direction: column; gap: 10px; width: 256px; flex-shrink: 0; }
+
+    /* ═══ RESPONSIVE BREAKPOINT ═══ */
+    @media (min-width: 768px) {
+      #app-main {
+        flex-direction: row;
+        align-items: flex-start;
+        padding-bottom: 16px;
+      }
+      #camera-wrapper { aspect-ratio: 16/9; }
+      #sidebar { display: flex; }
+      #mobile-bar { display: none; }
+      #mobile-info { display: none; }
+      #header-status { display: none; }  /* handled by sidebar */
+    }
   </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body>
 
   <!-- Header -->
-  <header class="bg-white shadow-sm py-3 px-6 flex items-center gap-4">
-    <div class="flex flex-col leading-tight">
-      <span class="logo-text">&#9829; FOTO KITA</span>
-      <span class="text-xs text-gray-500 font-medium tracking-wide">
+  <header id="app-header">
+    <div>
+      <div class="logo-text">&#9829; FOTO KITA</div>
+      <div style="font-size:0.65rem;color:#9ca3af;font-weight:500;letter-spacing:0.05em;margin-top:1px;">
         Instant Blur Photo Booth &nbsp;<span class="beta-badge">BETA</span>
-      </span>
+      </div>
+    </div>
+    <!-- mobile cam status -->
+    <div id="header-status">
+      <div class="status-dot inactive" id="camDotMobile"></div>
+      <span style="font-size:0.75rem;color:#6b7280;font-weight:600;" id="camTextMobile">Memulai...</span>
     </div>
   </header>
 
-  <!-- Main Content -->
-  <main class="flex-1 flex flex-col md:flex-row gap-4 p-4 max-w-6xl mx-auto w-full">
+  <!-- Main -->
+  <main id="app-main">
 
-    <!-- Camera Panel -->
-    <div class="flex-1 flex flex-col gap-3">
+    <!-- Camera column -->
+    <div id="camera-col">
+
+      <!-- Camera box -->
       <div id="camera-wrapper">
-        <video id="videoEl" autoplay playsinline muted></video>
+        <video id="videoEl" autoplay playsinline muted webkit-playsinline x5-playsinline></video>
         <canvas id="canvasEl"></canvas>
         <div class="blur-overlay" id="blurOverlay"></div>
         <div id="blur-label">BLUR!</div>
         <div id="flash"></div>
+        <div id="rec-indicator"><div class="rec-dot"></div><span class="rec-text">REC</span></div>
 
-        <!-- Start overlay (shown before session) -->
+        <!-- Start overlay -->
         <div id="start-overlay">
-          <p class="text-white text-sm font-semibold opacity-70 tracking-widest">FOTO KITA BOOTH</p>
+          <p style="color:rgba(255,255,255,0.6);font-size:0.75rem;font-weight:600;letter-spacing:3px;">FOTO KITA BOOTH</p>
           <button id="mulai-btn">🎬 MULAI</button>
-          <p class="text-white text-xs opacity-50">Tekan untuk memulai sesi foto</p>
+          <p style="color:rgba(255,255,255,0.35);font-size:0.7rem;">Tekan untuk memulai sesi foto</p>
         </div>
 
-        <!-- Countdown overlay -->
-        <div id="countdown-overlay">
-          <div id="countdown-num">3</div>
-        </div>
+        <!-- Countdown -->
+        <div id="countdown-overlay"><div id="countdown-num">1</div></div>
 
-        <!-- Easter egg: Hidup Jokowi -->
+        <!-- Easter egg -->
         <div id="easter-overlay">
           <div class="star">⭐</div>
           <div id="easter-text">HIDUP<br>JOKOWI!</div>
@@ -320,242 +363,236 @@
         </div>
 
         <div id="no-camera-msg">
-          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
           </svg>
-          <p class="text-sm font-medium">Mengakses kamera...</p>
+          <p style="font-size:0.85rem;font-weight:500;">Mengakses kamera...</p>
         </div>
       </div>
 
-      <!-- Gesture Status Bar -->
-      <div class="card flex items-center gap-3">
-        <div class="flex items-center gap-2 flex-1">
-          <div class="status-dot inactive" id="gestureStatusDot"></div>
-          <span class="text-sm font-semibold text-gray-700" id="gestureStatusText">Tekan Mulai untuk memulai...</span>
-        </div>
-        <span class="text-xs text-gray-400" id="handCount">Tangan: 0</span>
+      <!-- Gesture status -->
+      <div class="status-bar">
+        <div class="status-dot inactive" id="gestureStatusDot"></div>
+        <span style="font-size:0.8rem;font-weight:600;color:#374151;flex:1;" id="gestureStatusText">Tekan Mulai untuk memulai...</span>
+        <span style="font-size:0.72rem;color:#9ca3af;white-space:nowrap;" id="handCount">Tangan: 0</span>
       </div>
-    </div>
 
-    <!-- Right Side Panel -->
-    <div class="md:w-64 flex flex-col gap-3">
+      <!-- Mobile info accordion -->
+      <div id="mobile-info" style="display:flex;flex-direction:column;gap:8px;">
+        <details>
+          <summary>
+            <span class="card-title" style="margin:0;">How to Play</span>
+            <svg class="chevron" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <div class="accordion-body" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">1</div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Izinkan akses kamera saat diminta</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">2</div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Tekan <strong>Mulai</strong> untuk memulai sesi</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">3</div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Acungkan ✌ peace — layar akan ter-blur!</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">4</div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Kepalkan tangan untuk Easter Egg 🤫</p></div>
+          </div>
+        </details>
 
-      <!-- Camera Status -->
+        <details>
+          <summary>
+            <span class="card-title" style="margin:0;">Kamera &amp; Tips</span>
+            <svg class="chevron" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <div class="accordion-body" style="display:flex;flex-direction:column;gap:10px;">
+            <select id="cameraSelectMobile"><option value="">Memuat kamera...</option></select>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Pastikan ruangan cukup terang</p></div>
+              <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Rentangkan jari ✌ dengan jelas</p></div>
+              <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.78rem;color:#4b5563;line-height:1.4;margin:0;">Jaga tangan stabil di depan kamera</p></div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+    </div><!-- /camera-col -->
+
+    <!-- Desktop sidebar -->
+    <div id="sidebar">
       <div class="card">
         <div class="card-title">Camera Active</div>
-        <div class="flex items-center gap-2 mb-2">
-          <div class="status-dot inactive" id="camStatusDot"></div>
-          <span class="text-xs text-gray-600" id="camStatusText">Memulai kamera...</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div class="status-dot inactive" id="camDotDesktop"></div>
+          <span style="font-size:0.78rem;color:#4b5563;" id="camTextDesktop">Memulai kamera...</span>
         </div>
-        <p class="text-xs text-gray-500 leading-relaxed">
-          Tunjukkan gestur <strong>✌ peace</strong> ke kamera untuk mengaktifkan blur!
-        </p>
+        <p style="font-size:0.75rem;color:#6b7280;line-height:1.5;margin:0;">Tunjukkan gestur <strong>✌ peace</strong> untuk mengaktifkan blur!</p>
       </div>
 
-      <!-- Camera Source -->
       <div class="card">
         <div class="card-title">Camera Source</div>
-        <select id="cameraSelect">
-          <option value="">Memuat kamera...</option>
-        </select>
+        <select id="cameraSelectDesktop"><option value="">Memuat kamera...</option></select>
       </div>
 
-      <!-- How to Play -->
       <div class="card">
         <div class="card-title">How to Play</div>
-        <div class="flex flex-col gap-2.5">
-          <div class="flex items-start gap-2">
-            <div class="step-num">1</div>
-            <p class="text-xs text-gray-600 leading-snug">Izinkan akses kamera saat browser meminta</p>
-          </div>
-          <div class="flex items-start gap-2">
-            <div class="step-num">2</div>
-            <p class="text-xs text-gray-600 leading-snug">Tekan tombol <strong>Mulai</strong> untuk memulai sesi</p>
-          </div>
-          <div class="flex items-start gap-2">
-            <div class="step-num">3</div>
-            <p class="text-xs text-gray-600 leading-snug">Acungkan ✌ peace — layar akan ter-blur!</p>
-          </div>
-          <div class="flex items-start gap-2">
-            <div class="step-num">4</div>
-            <p class="text-xs text-gray-600 leading-snug">Kepalkan tangan untuk Easter Egg 🤫</p>
-          </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">1</div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Izinkan akses kamera saat browser meminta</p></div>
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">2</div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Tekan <strong>Mulai</strong> untuk memulai sesi</p></div>
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">3</div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Acungkan ✌ peace — layar akan ter-blur!</p></div>
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="step-num">4</div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Kepalkan tangan untuk Easter Egg 🤫</p></div>
         </div>
       </div>
 
-      <!-- Tips -->
       <div class="card">
         <div class="card-title">Tips</div>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-start gap-2">
-            <div class="tip-dot"></div>
-            <p class="text-xs text-gray-600 leading-snug">Pastikan ruangan cukup terang agar deteksi akurat</p>
-          </div>
-          <div class="flex items-start gap-2">
-            <div class="tip-dot"></div>
-            <p class="text-xs text-gray-600 leading-snug">Rentangkan kedua jari ✌ dengan jelas</p>
-          </div>
-          <div class="flex items-start gap-2">
-            <div class="tip-dot"></div>
-            <p class="text-xs text-gray-600 leading-snug">Jaga tangan stabil di depan kamera</p>
-          </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Pastikan ruangan cukup terang</p></div>
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Rentangkan kedua jari ✌ dengan jelas</p></div>
+          <div style="display:flex;align-items:flex-start;gap:8px;"><div class="tip-dot"></div><p style="font-size:0.75rem;color:#4b5563;line-height:1.4;margin:0;">Jaga tangan stabil di depan kamera</p></div>
         </div>
       </div>
 
-      <!-- Mulai Button (sidebar version) -->
-      <button id="mulai-btn-side"
-        class="w-full py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-base rounded-xl transition-colors shadow tracking-widest">
-        🎬 MULAI
-      </button>
-
-      <!-- Screenshot Button -->
-      <button id="screenshotBtn"
-        class="w-full py-2.5 bg-gray-700 hover:bg-gray-800 active:bg-gray-900 text-white font-bold text-sm rounded-xl transition-colors shadow" disabled>
-        📸 Ambil Foto
-      </button>
+      <button id="mulai-btn-desktop" class="btn-primary">🎬 MULAI</button>
+      <button id="rec-btn-desktop" class="btn-secondary" disabled>🎥 Rekam Video</button>
     </div>
 
   </main>
 
-  <canvas id="screenshotCanvas" class="hidden"></canvas>
+  <!-- Mobile bottom sticky bar -->
+  <div id="mobile-bar">
+    <button id="mulai-btn-mobile" class="btn-primary" style="flex:1;">🎬 MULAI</button>
+    <button id="rec-btn-mobile" class="btn-secondary" style="flex:1;" disabled>🎥 Rekam Video</button>
+  </div>
+
+  <canvas id="screenshotCanvas" style="display:none;"></canvas>
 
   <script>
     // ─── DOM refs ────────────────────────────────────────────────────────────
-    const videoEl           = document.getElementById('videoEl');
-    const canvasEl          = document.getElementById('canvasEl');
-    const ctx               = canvasEl.getContext('2d');
-    const blurOverlay       = document.getElementById('blurOverlay');
-    const blurLabel         = document.getElementById('blur-label');
-    const camStatusDot      = document.getElementById('camStatusDot');
-    const camStatusText     = document.getElementById('camStatusText');
-    const gestureStatusDot  = document.getElementById('gestureStatusDot');
-    const gestureStatusText = document.getElementById('gestureStatusText');
-    const handCountEl       = document.getElementById('handCount');
-    const cameraSelect      = document.getElementById('cameraSelect');
-    const noCameraMsg       = document.getElementById('no-camera-msg');
-    const screenshotBtn     = document.getElementById('screenshotBtn');
-    const mulaiBtn          = document.getElementById('mulai-btn');
-    const mulaiSide         = document.getElementById('mulai-btn-side');
-    const startOverlay      = document.getElementById('start-overlay');
-    const countdownOverlay  = document.getElementById('countdown-overlay');
-    const countdownNum      = document.getElementById('countdown-num');
-    const easterOverlay     = document.getElementById('easter-overlay');
-    const flashEl           = document.getElementById('flash');
+    const videoEl          = document.getElementById('videoEl');
+    const canvasEl         = document.getElementById('canvasEl');
+    const ctx              = canvasEl.getContext('2d');
+    const blurOverlay      = document.getElementById('blurOverlay');
+    const blurLabel        = document.getElementById('blur-label');
+    const gestureStatusDot = document.getElementById('gestureStatusDot');
+    const gestureStatusText= document.getElementById('gestureStatusText');
+    const handCountEl      = document.getElementById('handCount');
+    const noCameraMsg      = document.getElementById('no-camera-msg');
+    const startOverlay     = document.getElementById('start-overlay');
+    const countdownOverlay = document.getElementById('countdown-overlay');
+    const countdownNum     = document.getElementById('countdown-num');
+    const easterOverlay    = document.getElementById('easter-overlay');
+    const flashEl          = document.getElementById('flash');
+    const recIndicator     = document.getElementById('rec-indicator');
+
+    const camDots  = [document.getElementById('camDotMobile'),  document.getElementById('camDotDesktop')];
+    const camTexts = [document.getElementById('camTextMobile'), document.getElementById('camTextDesktop')];
+
+    const camSelects  = [document.getElementById('cameraSelectMobile'), document.getElementById('cameraSelectDesktop')];
+    const mulaiBtns   = [document.getElementById('mulai-btn'), document.getElementById('mulai-btn-desktop'), document.getElementById('mulai-btn-mobile')];
+    const recBtns     = [document.getElementById('rec-btn-desktop'), document.getElementById('rec-btn-mobile')];
 
     // ─── State ───────────────────────────────────────────────────────────────
-    let currentStream   = null;
-    let blurAlpha       = 0;
-    let sessionActive   = false;
+    let currentStream    = null;
+    let blurAlpha        = 0;
+    let sessionActive    = false;
     let countdownRunning = false;
-    let easterActive    = false;
-    let easterTimeout   = null;
-    let fistFrames      = 0;       // consecutive frames with fist detected
+    let easterActive     = false;
+    let easterTimeout    = null;
+    let fistFrames       = 0;
+
+    const isMobile = () => window.innerWidth < 768;
 
     // ─── Audio ───────────────────────────────────────────────────────────────
-    const bgmAudio     = new Audio('FOTO KITA BLUR - SAL PRIADI (mp3cut.net).mp3');
-    const jokowiAudio  = new Audio('Hidup jokowi  sound meme.mp3');
-    bgmAudio.loop      = false;
-    jokowiAudio.loop   = false;
+    const bgmAudio    = new Audio('FOTO KITA BLUR - SAL PRIADI (mp3cut.net).mp3');
+    const jokowiAudio = new Audio('Hidup jokowi  sound meme.mp3');
+    bgmAudio.loop = jokowiAudio.loop = false;
 
-    function playCountdownSound() {
-      bgmAudio.currentTime = 0;
-      bgmAudio.play().catch(() => {});
-    }
-
-    function stopCountdownSound() {
-      bgmAudio.pause();
-      bgmAudio.currentTime = 0;
-    }
-
-    function playHidupJokowi() {
-      jokowiAudio.currentTime = 0;
-      jokowiAudio.play().catch(() => {});
-    }
-
-    // Camera shutter click (tetap Web Audio agar ringan)
+    function playBgm()     { bgmAudio.currentTime = 0;    bgmAudio.play().catch(()=>{}); }
+    function stopBgm()     { bgmAudio.pause(); bgmAudio.currentTime = 0; }
+    function playJokowi()  { jokowiAudio.currentTime = 0; jokowiAudio.play().catch(()=>{}); }
     function playShutter() {
       try {
-        const ac   = new (window.AudioContext || window.webkitAudioContext)();
-        const osc  = ac.createOscillator();
-        const gain = ac.createGain();
-        osc.connect(gain); gain.connect(ac.destination);
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(1200, ac.currentTime);
-        gain.gain.setValueAtTime(0.2, ac.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.08);
-        osc.start(); osc.stop(ac.currentTime + 0.1);
-      } catch {}
+        const ac=new(window.AudioContext||window.webkitAudioContext)();
+        const o=ac.createOscillator(),g=ac.createGain();
+        o.connect(g);g.connect(ac.destination);o.type='square';
+        o.frequency.setValueAtTime(1200,ac.currentTime);
+        g.gain.setValueAtTime(0.2,ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.08);
+        o.start();o.stop(ac.currentTime+0.1);
+      }catch{}
+    }
+
+    // ─── Camera status helpers ────────────────────────────────────────────────
+    function setCamStatus(active, text) {
+      camDots.forEach(d  => d  && d.classList.toggle('inactive', !active));
+      camTexts.forEach(t => t  && (t.textContent = text));
+    }
+
+    function populateCamSelects(cams) {
+      camSelects.forEach(sel => {
+        if (!sel) return;
+        sel.innerHTML = '';
+        if (!cams.length) { sel.innerHTML = '<option>Tidak ada kamera</option>'; return; }
+        cams.forEach((c, i) => {
+          const o = document.createElement('option');
+          o.value = c.deviceId;
+          o.textContent = c.label || `Camera ${i+1}`;
+          sel.appendChild(o);
+        });
+      });
     }
 
     // ─── Camera ──────────────────────────────────────────────────────────────
     async function getCameras() {
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cams = devices.filter(d => d.kind === 'videoinput');
-        cameraSelect.innerHTML = '';
-        cams.forEach((cam, i) => {
-          const opt = document.createElement('option');
-          opt.value = cam.deviceId;
-          opt.textContent = cam.label || `Camera ${i + 1}`;
-          cameraSelect.appendChild(opt);
-        });
-        if (!cams.length) cameraSelect.innerHTML = '<option>Tidak ada kamera</option>';
-      } catch { cameraSelect.innerHTML = '<option>Gagal memuat kamera</option>'; }
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        populateCamSelects(devs.filter(d => d.kind === 'videoinput'));
+      } catch { populateCamSelects([]); }
     }
 
     async function startCamera(deviceId) {
       if (currentStream) currentStream.getTracks().forEach(t => t.stop());
       try {
-        const constraints = {
-          video: deviceId
-            ? { deviceId: { exact: deviceId }, width: 1280, height: 720 }
-            : { width: 1280, height: 720 }
-        };
-        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        let vc;
+        if (deviceId)        vc = { deviceId: { exact: deviceId } };
+        else if (isMobile()) vc = { facingMode: 'user' };
+        else                 vc = { width: { ideal: 1280 }, height: { ideal: 720 } };
+
+        currentStream = await navigator.mediaDevices.getUserMedia({ video: vc });
         videoEl.srcObject = currentStream;
         await new Promise(res => videoEl.onloadedmetadata = res);
         videoEl.play();
         noCameraMsg.style.display = 'none';
-        camStatusDot.classList.remove('inactive');
-        camStatusText.textContent = 'Kamera aktif';
+        setCamStatus(true, 'Kamera aktif');
         await getCameras();
         startHandDetection();
-      } catch (e) {
-        camStatusText.textContent = 'Gagal mengakses kamera';
+      } catch(e) {
+        setCamStatus(false, 'Gagal mengakses kamera');
         console.error(e);
       }
     }
 
-    cameraSelect.addEventListener('change', () => {
-      if (cameraSelect.value) startCamera(cameraSelect.value);
-    });
+    camSelects.forEach(sel => sel && sel.addEventListener('change', () => {
+      if (sel.value) {
+        camSelects.forEach(s => s && (s.value = sel.value));
+        startCamera(sel.value);
+      }
+    }));
 
-    // ─── Gesture Helpers ─────────────────────────────────────────────────────
-    function fingerUp(lm, tip, pip) { return lm[tip].y < lm[pip].y; }
+    // ─── Gesture helpers ─────────────────────────────────────────────────────
+    const fingerUp = (lm, tip, pip) => lm[tip].y < lm[pip].y;
 
-    function isPeaceGesture(lm) {
-      if (!fingerUp(lm, 8, 6) || !fingerUp(lm, 12, 10)) return false;
-      if (fingerUp(lm, 16, 14) || fingerUp(lm, 20, 18))  return false;
-      const dx = lm[8].x - lm[12].x, dy = lm[8].y - lm[12].y;
-      return Math.sqrt(dx*dx + dy*dy) >= 0.05;
+    function isPeace(lm) {
+      if (!fingerUp(lm,8,6) || !fingerUp(lm,12,10)) return false;
+      if (fingerUp(lm,16,14) || fingerUp(lm,20,18)) return false;
+      const dx=lm[8].x-lm[12].x, dy=lm[8].y-lm[12].y;
+      return Math.sqrt(dx*dx+dy*dy) >= 0.05;
     }
 
-    function isFistGesture(lm) {
-      // All 4 fingers curled (tips below PIP)
-      return !fingerUp(lm, 8, 6) &&
-             !fingerUp(lm, 12, 10) &&
-             !fingerUp(lm, 16, 14) &&
-             !fingerUp(lm, 20, 18);
+    function isFist(lm) {
+      return !fingerUp(lm,8,6) && !fingerUp(lm,12,10) &&
+             !fingerUp(lm,16,14) && !fingerUp(lm,20,18);
     }
 
     // ─── MediaPipe Hands ─────────────────────────────────────────────────────
     function startHandDetection() {
-      const hands = new Hands({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-      });
+      const hands = new Hands({ locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
       hands.setOptions({
         maxNumHands: 4,
-        modelComplexity: 1,
+        modelComplexity: isMobile() ? 0 : 1,
         minDetectionConfidence: 0.6,
         minTrackingConfidence: 0.6,
       });
@@ -567,7 +604,8 @@
           canvasEl.height = videoEl.videoHeight;
           await hands.send({ image: videoEl });
         },
-        width: 1280, height: 720,
+        width:  isMobile() ? 640  : 1280,
+        height: isMobile() ? 480  : 720,
       });
       cam.start();
     }
@@ -576,142 +614,155 @@
       ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
       const detected = results.multiHandLandmarks || [];
       handCountEl.textContent = `Tangan: ${detected.length}`;
-
       if (!sessionActive) return;
 
-      let peaceFound = false;
-      let fistFound  = false;
-      for (const hand of detected) {
-        if (isPeaceGesture(hand)) peaceFound = true;
-        if (isFistGesture(hand))  fistFound  = true;
+      let peaceFound=false, fistFound=false;
+      for (const h of detected) {
+        if (isPeace(h)) peaceFound=true;
+        if (isFist(h))  fistFound=true;
       }
 
-      // ── Easter egg: fist ──
-      if (fistFound) {
-        fistFrames++;
-        if (fistFrames === 8 && !easterActive) triggerEasterEgg();
-      } else {
-        fistFrames = 0;
-      }
+      if (fistFound) { fistFrames++; if (fistFrames===8 && !easterActive) triggerEasterEgg(); }
+      else fistFrames=0;
 
-      // ── Peace → blur ──
       if (!easterActive) {
         if (peaceFound) {
-          blurAlpha = Math.min(1, blurAlpha + 0.15);
+          blurAlpha = Math.min(1, blurAlpha+0.15);
           gestureStatusDot.classList.remove('inactive');
           gestureStatusText.textContent = '✌ Peace terdeteksi! Blur aktif';
         } else {
-          blurAlpha = Math.max(0, blurAlpha - 0.12);
+          blurAlpha = Math.max(0, blurAlpha-0.12);
           gestureStatusDot.classList.add('inactive');
-          gestureStatusText.textContent = detected.length > 0
+          gestureStatusText.textContent = detected.length>0
             ? 'Tangan terdeteksi — tunjukkan peace ✌'
             : 'Menunggu gestur peace...';
         }
-
-        const px = Math.round(blurAlpha * 22);
-        blurOverlay.style.backdropFilter = px > 0 ? `blur(${px}px)` : '';
-        blurOverlay.style.webkitBackdropFilter = px > 0 ? `blur(${px}px)` : '';
-        blurLabel.classList.toggle('visible', blurAlpha > 0.5);
+        const px = Math.round(blurAlpha*22);
+        const v  = px>0 ? `blur(${px}px)` : '';
+        blurOverlay.style.backdropFilter = v;
+        blurOverlay.style.webkitBackdropFilter = v;
+        blurLabel.classList.toggle('visible', blurAlpha>0.5);
       }
     }
 
     // ─── Easter Egg ──────────────────────────────────────────────────────────
     function triggerEasterEgg() {
-      easterActive = true;
+      easterActive=true;
       easterOverlay.classList.add('show');
-      stopCountdownSound();
-      playHidupJokowi();
-      gestureStatusText.textContent = '👊 HIDUP JOKOWI! Easter egg aktif!';
-
+      stopBgm(); playJokowi();
+      gestureStatusText.textContent='👊 HIDUP JOKOWI! Easter egg aktif!';
       clearTimeout(easterTimeout);
-      easterTimeout = setTimeout(() => {
+      easterTimeout=setTimeout(()=>{
         easterOverlay.classList.remove('show');
-        easterActive = false;
-        fistFrames = 0;
-        gestureStatusText.textContent = 'Menunggu gestur peace...';
+        easterActive=false; fistFrames=0;
+        gestureStatusText.textContent='Menunggu gestur peace...';
       }, 5000);
     }
 
-    // ─── Countdown & Mulai ───────────────────────────────────────────────────
+    // ─── Countdown ───────────────────────────────────────────────────────────
     function doCountdown() {
       if (countdownRunning) return;
-      countdownRunning = true;
-
-      const steps = ['1', '2', '3', 'FOTO!'];
-      let i = 0;
-
+      countdownRunning=true;
+      const steps=['1','2','3','FOTO!'];
+      let i=0;
       countdownOverlay.classList.add('show');
 
       function nextStep() {
-        countdownNum.className = steps[i] === 'FOTO!' ? 'foto-text' : '';
+        countdownNum.className = steps[i]==='FOTO!' ? 'foto-text' : '';
         countdownNum.textContent = steps[i];
-        // retrigger animation
-        countdownNum.style.animation = 'none';
+        countdownNum.style.animation='none';
         void countdownNum.offsetWidth;
-        countdownNum.style.animation = '';
-
-        // mulai lagu pas FOTO! muncul
-        if (steps[i] === 'FOTO!') playCountdownSound();
-
+        countdownNum.style.animation='';
+        if (steps[i]==='FOTO!') playBgm();
         i++;
-        if (i < steps.length) {
-          setTimeout(nextStep, 1000);
-        } else {
-          // FOTO moment
-          setTimeout(() => {
+        if (i<steps.length) { setTimeout(nextStep,1000); }
+        else {
+          setTimeout(()=>{
             flashEl.classList.add('flash-on');
             playShutter();
-            setTimeout(() => flashEl.classList.remove('flash-on'), 150);
+            setTimeout(()=>flashEl.classList.remove('flash-on'),150);
             countdownOverlay.classList.remove('show');
-            countdownRunning = false;
-            // session stays active, gesture detection continues
-          }, 700);
+            countdownRunning=false;
+          },700);
         }
       }
       nextStep();
     }
 
+    // ─── Start session ────────────────────────────────────────────────────────
     function startSession() {
       if (countdownRunning) return;
       startOverlay.classList.add('hidden');
-      sessionActive = true;
-      screenshotBtn.disabled = false;
-      gestureStatusText.textContent = 'Menunggu gestur peace...';
+      sessionActive=true;
+      recBtns.forEach(b=>b&&(b.disabled=false));
+      gestureStatusText.textContent='Menunggu gestur peace...';
       doCountdown();
     }
+    mulaiBtns.forEach(b=>b&&b.addEventListener('click', startSession));
 
-    mulaiBtn.addEventListener('click', startSession);
-    mulaiSide.addEventListener('click', startSession);
+    // ─── Video Recording ─────────────────────────────────────────────────────
+    const recCanvas    = document.createElement('canvas');
+    const recCtx       = recCanvas.getContext('2d');
+    let mediaRecorder  = null;
+    let recordedChunks = [];
+    let isRecording    = false;
+    let recRafId       = null;
 
-    // ─── Screenshot ──────────────────────────────────────────────────────────
-    screenshotBtn.addEventListener('click', () => {
-      const sc   = document.getElementById('screenshotCanvas');
-      sc.width   = videoEl.videoWidth;
-      sc.height  = videoEl.videoHeight;
-      const sctx = sc.getContext('2d');
-      sctx.save();
-      sctx.scale(-1, 1);
-      sctx.drawImage(videoEl, -sc.width, 0);
-      sctx.restore();
+    function pickMime() {
+      return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
+        .find(t=>MediaRecorder.isTypeSupported(t)) || '';
+    }
 
-      if (blurAlpha > 0.3) {
-        sctx.filter = `blur(${Math.round(blurAlpha * 18)}px)`;
-        sctx.save();
-        sctx.scale(-1, 1);
-        sctx.drawImage(videoEl, -sc.width, 0);
-        sctx.restore();
-        sctx.filter = 'none';
-      }
+    function drawRecFrame() {
+      if (!isRecording) return;
+      recCanvas.width  = videoEl.videoWidth  || 640;
+      recCanvas.height = videoEl.videoHeight || 480;
+      recCtx.save();
+      recCtx.scale(-1,1);
+      recCtx.filter = blurAlpha>0 ? `blur(${Math.round(blurAlpha*22)}px)` : 'none';
+      recCtx.drawImage(videoEl, -recCanvas.width, 0);
+      recCtx.restore();
+      recRafId = requestAnimationFrame(drawRecFrame);
+    }
 
-      playShutter();
-      flashEl.classList.add('flash-on');
-      setTimeout(() => flashEl.classList.remove('flash-on'), 120);
+    function startRecording() {
+      if (!currentStream) return;
+      recordedChunks=[]; isRecording=true;
+      drawRecFrame();
+      const stream  = recCanvas.captureStream(30);
+      const mime    = pickMime();
+      mediaRecorder = new MediaRecorder(stream, mime?{mimeType:mime}:{});
+      mediaRecorder.ondataavailable = e=>{ if(e.data.size>0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = saveVideo;
+      mediaRecorder.start(100);
+      recIndicator.classList.add('show');
+      recBtns.forEach(b=>b&&(b.classList.add('recording'), b.textContent='⏹ Stop Rekam'));
+    }
 
-      const link = document.createElement('a');
-      link.download = `fotokita_${Date.now()}.png`;
-      link.href = sc.toDataURL('image/png');
-      link.click();
-    });
+    function stopRecording() {
+      isRecording=false;
+      cancelAnimationFrame(recRafId);
+      if (mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
+      recIndicator.classList.remove('show');
+      recBtns.forEach(b=>b&&(b.classList.remove('recording'), b.textContent='🎥 Rekam Video'));
+    }
+
+    function saveVideo() {
+      const ext  = (mediaRecorder.mimeType||'').includes('mp4')?'mp4':'webm';
+      const blob = new Blob(recordedChunks,{type:mediaRecorder.mimeType||'video/webm'});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.download = `fotokita_${Date.now()}.${ext}`;
+      a.href=url; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+      recordedChunks=[];
+    }
+
+    function toggleRecording() {
+      if (!sessionActive) return;
+      isRecording ? stopRecording() : startRecording();
+    }
+    recBtns.forEach(b=>b&&b.addEventListener('click', toggleRecording));
 
     // ─── Init ────────────────────────────────────────────────────────────────
     startCamera(null);
