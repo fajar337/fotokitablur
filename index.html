@@ -499,15 +499,49 @@
     const bgmAudio    = new Audio('FOTO KITA BLUR - SAL PRIADI (mp3cut.net).mp3');
     const jokowiAudio = new Audio('Hidup jokowi  sound meme.mp3');
     bgmAudio.loop = jokowiAudio.loop = false;
+    let audioCtx = null;
+    let recordAudioDest = null;
+    let bgmSource = null;
+    let jokowiSource = null;
+    let micSource = null;
+    let micSourceStream = null;
 
-    function playBgm()     { bgmAudio.currentTime = 0;    bgmAudio.play().catch(()=>{}); }
+    function ensureAudioGraph() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return null;
+      if (!audioCtx) {
+        audioCtx = new AudioCtx();
+        recordAudioDest = audioCtx.createMediaStreamDestination();
+        bgmSource = audioCtx.createMediaElementSource(bgmAudio);
+        jokowiSource = audioCtx.createMediaElementSource(jokowiAudio);
+        [bgmSource, jokowiSource].forEach(source => {
+          source.connect(audioCtx.destination);
+          source.connect(recordAudioDest);
+        });
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+
+      const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
+      if (audioTracks.length && micSourceStream !== currentStream) {
+        if (micSource) micSource.disconnect();
+        micSourceStream = currentStream;
+        micSource = audioCtx.createMediaStreamSource(new MediaStream(audioTracks));
+        micSource.connect(recordAudioDest);
+      }
+      return audioCtx;
+    }
+
+    function playBgm()     { ensureAudioGraph(); bgmAudio.currentTime = 0;    bgmAudio.play().catch(()=>{}); }
     function stopBgm()     { bgmAudio.pause(); bgmAudio.currentTime = 0; }
-    function playJokowi()  { jokowiAudio.currentTime = 0; jokowiAudio.play().catch(()=>{}); }
+    function playJokowi()  { ensureAudioGraph(); jokowiAudio.currentTime = 0; jokowiAudio.play().catch(()=>{}); }
     function playShutter() {
       try {
-        const ac=new(window.AudioContext||window.webkitAudioContext)();
+        const ac=ensureAudioGraph();
+        if (!ac) return;
         const o=ac.createOscillator(),g=ac.createGain();
-        o.connect(g);g.connect(ac.destination);o.type='square';
+        o.connect(g);g.connect(ac.destination);
+        if (recordAudioDest) g.connect(recordAudioDest);
+        o.type='square';
         o.frequency.setValueAtTime(1200,ac.currentTime);
         g.gain.setValueAtTime(0.2,ac.currentTime);
         g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.08);
@@ -692,6 +726,7 @@
     // ─── Start session ────────────────────────────────────────────────────────
     function startSession() {
       if (countdownRunning) return;
+      ensureAudioGraph();
       startOverlay.classList.add('hidden');
       sessionActive=true;
       recBtns.forEach(b=>b&&(b.disabled=false));
@@ -706,17 +741,30 @@
     let mediaRecorder  = null;
     let recordedChunks = [];
     let isRecording    = false;
-    let recIntervalId  = null;
+    let recAnimationId = null;
+    let recLastFrameAt = 0;
     const REC_FPS      = isMobile() ? 20 : 30;
 
     function pickMime() {
-      return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4']
+      return ['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm','video/webm;codecs=vp9','video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
     }
 
+    function resizeRecCanvas() {
+      const srcW = videoEl.videoWidth  || 640;
+      const srcH = videoEl.videoHeight || 480;
+      const maxW = isMobile() ? 720 : 1280;
+      const scale = Math.min(1, maxW / srcW);
+      const w = Math.round(srcW * scale);
+      const h = Math.round(srcH * scale);
+      if (recCanvas.width !== w || recCanvas.height !== h) {
+        recCanvas.width = w;
+        recCanvas.height = h;
+      }
+    }
+
     function drawRecFrame() {
-      recCanvas.width  = videoEl.videoWidth  || 640;
-      recCanvas.height = videoEl.videoHeight || 480;
+      resizeRecCanvas();
       recCtx.save();
       recCtx.scale(-1, 1);
       recCtx.filter = blurAlpha > 0 ? `blur(${Math.round(blurAlpha * 22)}px)` : 'none';
@@ -724,27 +772,43 @@
       recCtx.restore();
     }
 
+    function scheduleRecFrame(now = 0) {
+      if (!isRecording) return;
+      if (!recLastFrameAt || now - recLastFrameAt >= 1000 / REC_FPS) {
+        drawRecFrame();
+        recLastFrameAt = now;
+      }
+      recAnimationId = requestAnimationFrame(scheduleRecFrame);
+    }
+
     function startRecording() {
       if (!currentStream) return;
+      ensureAudioGraph();
       recordedChunks = []; isRecording = true;
+      recLastFrameAt = 0;
 
       // draw first frame so canvas is not empty
       drawRecFrame();
 
       // video stream from canvas at fixed FPS
       const videoStream = recCanvas.captureStream(REC_FPS);
-
-      // attach audio tracks from camera stream (if any)
-      currentStream.getAudioTracks().forEach(t => videoStream.addTrack(t));
+      const recordStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...(recordAudioDest ? recordAudioDest.stream.getAudioTracks() : currentStream.getAudioTracks())
+      ]);
 
       const mime    = pickMime();
-      mediaRecorder = new MediaRecorder(videoStream, mime ? { mimeType: mime } : {});
+      const recOptions = {
+        videoBitsPerSecond: isMobile() ? 1800000 : 3500000,
+        audioBitsPerSecond: 128000
+      };
+      if (mime) recOptions.mimeType = mime;
+      mediaRecorder = new MediaRecorder(recordStream, recOptions);
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.onstop = saveVideo;
       mediaRecorder.start(200);
 
-      // setInterval for consistent frame rate (avoids RAF throttling on background tabs)
-      recIntervalId = setInterval(drawRecFrame, 1000 / REC_FPS);
+      recAnimationId = requestAnimationFrame(scheduleRecFrame);
 
       recIndicator.classList.add('show');
       recBtns.forEach(b => b && (b.classList.add('recording'), b.textContent = '⏹ Stop Rekam'));
@@ -752,8 +816,8 @@
 
     function stopRecording() {
       isRecording = false;
-      clearInterval(recIntervalId);
-      recIntervalId = null;
+      if (recAnimationId) cancelAnimationFrame(recAnimationId);
+      recAnimationId = null;
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
       recIndicator.classList.remove('show');
       recBtns.forEach(b => b && (b.classList.remove('recording'), b.textContent = '🎥 Rekam Video'));
