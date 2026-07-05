@@ -741,12 +741,19 @@
     let mediaRecorder  = null;
     let recordedChunks = [];
     let isRecording    = false;
-    let recAnimationId = null;
-    let recLastFrameAt = 0;
-    const REC_FPS      = isMobile() ? 20 : 30;
+    let recTimerId     = null;
+    let recVideoTrack  = null;
+    const REC_FPS      = isMobile() ? 18 : 24;
 
     function pickMime() {
-      return ['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm','video/webm;codecs=vp9','video/mp4']
+      return [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=h264,aac',
+        'video/mp4',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ]
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
     }
 
@@ -763,6 +770,28 @@
       }
     }
 
+    function drawRecText(text, y, size, color = '#ffffff') {
+      recCtx.save();
+      recCtx.font = `800 ${size}px Poppins, sans-serif`;
+      recCtx.textAlign = 'center';
+      recCtx.textBaseline = 'middle';
+      recCtx.lineJoin = 'round';
+      recCtx.strokeStyle = 'rgba(0,0,0,0.75)';
+      recCtx.lineWidth = Math.max(5, size * 0.12);
+      recCtx.shadowColor = 'rgba(0,0,0,0.55)';
+      recCtx.shadowBlur = Math.max(12, size * 0.35);
+      recCtx.strokeText(text, recCanvas.width / 2, y);
+      recCtx.fillStyle = color;
+      recCtx.fillText(text, recCanvas.width / 2, y);
+      recCtx.restore();
+    }
+
+    function drawRecOverlayText() {
+      if (blurAlpha > 0.5 && !easterActive) {
+        drawRecText('BLUR!', recCanvas.height / 2, Math.round(recCanvas.width * 0.09));
+      }
+    }
+
     function drawRecFrame() {
       resizeRecCanvas();
       recCtx.save();
@@ -770,28 +799,32 @@
       recCtx.filter = blurAlpha > 0 ? `blur(${Math.round(blurAlpha * 22)}px)` : 'none';
       recCtx.drawImage(videoEl, -recCanvas.width, 0);
       recCtx.restore();
+      recCtx.filter = 'none';
+      drawRecOverlayText();
+      if (recVideoTrack && recVideoTrack.requestFrame) recVideoTrack.requestFrame();
     }
 
-    function scheduleRecFrame(now = 0) {
+    function scheduleRecFrame() {
       if (!isRecording) return;
-      if (!recLastFrameAt || now - recLastFrameAt >= 1000 / REC_FPS) {
-        drawRecFrame();
-        recLastFrameAt = now;
-      }
-      recAnimationId = requestAnimationFrame(scheduleRecFrame);
+      drawRecFrame();
+      recTimerId = setTimeout(scheduleRecFrame, 1000 / REC_FPS);
     }
 
     function startRecording() {
       if (!currentStream) return;
       ensureAudioGraph();
       recordedChunks = []; isRecording = true;
-      recLastFrameAt = 0;
 
       // draw first frame so canvas is not empty
       drawRecFrame();
 
       // video stream from canvas at fixed FPS
-      const videoStream = recCanvas.captureStream(REC_FPS);
+      let videoStream = recCanvas.captureStream(0);
+      recVideoTrack = videoStream.getVideoTracks()[0] || null;
+      if (!recVideoTrack || !recVideoTrack.requestFrame) {
+        videoStream = recCanvas.captureStream(REC_FPS);
+        recVideoTrack = videoStream.getVideoTracks()[0] || null;
+      }
       const recordStream = new MediaStream([
         ...videoStream.getVideoTracks(),
         ...(recordAudioDest ? recordAudioDest.stream.getAudioTracks() : currentStream.getAudioTracks())
@@ -808,7 +841,7 @@
       mediaRecorder.onstop = saveVideo;
       mediaRecorder.start(200);
 
-      recAnimationId = requestAnimationFrame(scheduleRecFrame);
+      recTimerId = setTimeout(scheduleRecFrame, 1000 / REC_FPS);
 
       recIndicator.classList.add('show');
       recBtns.forEach(b => b && (b.classList.add('recording'), b.textContent = '⏹ Stop Rekam'));
@@ -816,9 +849,10 @@
 
     function stopRecording() {
       isRecording = false;
-      if (recAnimationId) cancelAnimationFrame(recAnimationId);
-      recAnimationId = null;
+      clearTimeout(recTimerId);
+      recTimerId = null;
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      recVideoTrack = null;
       recIndicator.classList.remove('show');
       recBtns.forEach(b => b && (b.classList.remove('recording'), b.textContent = '🎥 Rekam Video'));
     }
