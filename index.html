@@ -738,6 +738,8 @@
     // ─── Video Recording ─────────────────────────────────────────────────────
     const recCanvas    = document.createElement('canvas');
     const recCtx       = recCanvas.getContext('2d');
+    const recBlurCanvas= document.createElement('canvas');
+    const recBlurCtx   = recBlurCanvas.getContext('2d');
     let mediaRecorder  = null;
     let recordedChunks = [];
     let isRecording    = false;
@@ -792,14 +794,37 @@
       }
     }
 
+    function drawMirroredVideo(targetCtx, width, height) {
+      targetCtx.save();
+      targetCtx.scale(-1, 1);
+      targetCtx.drawImage(videoEl, -width, 0, width, height);
+      targetCtx.restore();
+    }
+
+    function drawFastBlurredVideo() {
+      const factor = 1 + blurAlpha * (isMobile() ? 8 : 7);
+      const blurW = Math.max(96, Math.round(recCanvas.width / factor));
+      const blurH = Math.max(72, Math.round(recCanvas.height / factor));
+      if (recBlurCanvas.width !== blurW || recBlurCanvas.height !== blurH) {
+        recBlurCanvas.width = blurW;
+        recBlurCanvas.height = blurH;
+      }
+
+      recBlurCtx.clearRect(0, 0, blurW, blurH);
+      recBlurCtx.imageSmoothingEnabled = true;
+      recBlurCtx.imageSmoothingQuality = 'low';
+      drawMirroredVideo(recBlurCtx, blurW, blurH);
+
+      recCtx.imageSmoothingEnabled = true;
+      recCtx.imageSmoothingQuality = 'low';
+      recCtx.drawImage(recBlurCanvas, 0, 0, recCanvas.width, recCanvas.height);
+    }
+
     function drawRecFrame() {
       resizeRecCanvas();
-      recCtx.save();
-      recCtx.scale(-1, 1);
-      recCtx.filter = blurAlpha > 0 ? `blur(${Math.round(blurAlpha * 22)}px)` : 'none';
-      recCtx.drawImage(videoEl, -recCanvas.width, 0);
-      recCtx.restore();
-      recCtx.filter = 'none';
+      recCtx.clearRect(0, 0, recCanvas.width, recCanvas.height);
+      if (blurAlpha > 0.02) drawFastBlurredVideo();
+      else drawMirroredVideo(recCtx, recCanvas.width, recCanvas.height);
       drawRecOverlayText();
       if (recVideoTrack && recVideoTrack.requestFrame) recVideoTrack.requestFrame();
     }
