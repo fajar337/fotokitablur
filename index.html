@@ -802,9 +802,9 @@
     }
 
     function drawFastBlurredVideo() {
-      const factor = 1 + blurAlpha * (isMobile() ? 8 : 7);
-      const blurW = Math.max(96, Math.round(recCanvas.width / factor));
-      const blurH = Math.max(72, Math.round(recCanvas.height / factor));
+      const factor = 1 + blurAlpha * (isMobile() ? 4 : 3.5);
+      const blurW = Math.max(180, Math.round(recCanvas.width / factor));
+      const blurH = Math.max(135, Math.round(recCanvas.height / factor));
       if (recBlurCanvas.width !== blurW || recBlurCanvas.height !== blurH) {
         recBlurCanvas.width = blurW;
         recBlurCanvas.height = blurH;
@@ -812,11 +812,13 @@
 
       recBlurCtx.clearRect(0, 0, blurW, blurH);
       recBlurCtx.imageSmoothingEnabled = true;
-      recBlurCtx.imageSmoothingQuality = 'low';
+      recBlurCtx.imageSmoothingQuality = 'high';
+      recBlurCtx.filter = blurAlpha > 0.15 ? `blur(${Math.round(blurAlpha * 3)}px)` : 'none';
       drawMirroredVideo(recBlurCtx, blurW, blurH);
+      recBlurCtx.filter = 'none';
 
       recCtx.imageSmoothingEnabled = true;
-      recCtx.imageSmoothingQuality = 'low';
+      recCtx.imageSmoothingQuality = 'high';
       recCtx.drawImage(recBlurCanvas, 0, 0, recCanvas.width, recCanvas.height);
     }
 
